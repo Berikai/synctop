@@ -214,12 +214,9 @@ public struct ProfileEditorView: View {
 
                     if vm.isAutoSyncEnabled {
                         Picker("Interval", selection: $vm.scheduleIntervalMinutes) {
-                            Text("Every 15 minutes").tag(15)
-                            Text("Every 30 minutes").tag(30)
-                            Text("Every 1 hour").tag(60)
-                            Text("Every 4 hours").tag(240)
-                            Text("Every 12 hours").tag(720)
-                            Text("Daily (24 hours)").tag(1440)
+                            ForEach(ScheduleInterval.allCases) { interval in
+                                Text(interval.title).tag(interval.rawValue)
+                            }
                         }
                     }
                 }

@@ -78,12 +78,28 @@ public struct ManagerWindowView: View {
             Divider()
 
             // Footer Bar
-            HStack {
+            HStack(spacing: 12) {
                 Text("\(state.profiles.count) configured folder \(state.profiles.count == 1 ? "pair" : "pairs")")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
                 Spacer()
+
+                Button {
+                    state.toggleLaunchAtLogin()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: state.isLaunchAtLoginEnabled ? "checkmark.circle.fill" : "circle")
+                            .foregroundColor(state.isLaunchAtLoginEnabled ? .accentColor : .secondary)
+                        Text("Start at Login")
+                    }
+                    .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .help("Automatically launch SyncTop in the background when logging into macOS")
+
+                Divider()
+                    .frame(height: 12)
 
                 if let firstRemote = state.detectedRemotes.first {
                     Text("Remote Engine: \(firstRemote):")

@@ -13,6 +13,23 @@ public struct RemoteFolderItem: Identifiable, Hashable, Sendable {
     }
 }
 
+public enum RemoteBrowserError: LocalizedError, Sendable, Equatable {
+    case binaryNotFound
+    case directoryNotFound(path: String, rawError: String)
+    case executionFailed(String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .binaryNotFound:
+            return "rclone binary not found. Please install rclone or specify custom path."
+        case .directoryNotFound(let path, _):
+            return "Directory '\(path)' was not found on remote."
+        case .executionFailed(let reason):
+            return "Failed to browse remote: \(reason)"
+        }
+    }
+}
+
 /// Allows interactive navigation and folder creation directly inside Google Drive via rclone APIs.
 public final class RcloneRemoteBrowser: Sendable {
     private let discovery: RcloneDiscovery
@@ -33,7 +50,7 @@ public final class RcloneRemoteBrowser: Sendable {
         customBinaryPath: String? = nil
     ) async throws -> [RemoteFolderItem] {
         guard let binary = discovery.locateBinary(customPath: customBinaryPath) else {
-            throw RcloneDiscoveryError.binaryNotFound
+            throw RemoteBrowserError.binaryNotFound
         }
 
         let cleanRemote = remoteName.trimmingCharacters(in: CharacterSet(charactersIn: ":"))
@@ -46,7 +63,11 @@ public final class RcloneRemoteBrowser: Sendable {
         )
 
         guard result.exitCode == 0 else {
-            throw RcloneDiscoveryError.executionFailed(result.errorOutput)
+            let stderrLower = result.errorOutput.lowercased()
+            if stderrLower.contains("directory not found") {
+                throw RemoteBrowserError.directoryNotFound(path: cleanSubPath, rawError: result.errorOutput)
+            }
+            throw RemoteBrowserError.executionFailed(result.errorOutput)
         }
 
         let lines = result.output.components(separatedBy: .newlines)
@@ -67,7 +88,7 @@ public final class RcloneRemoteBrowser: Sendable {
         customBinaryPath: String? = nil
     ) async throws {
         guard let binary = discovery.locateBinary(customPath: customBinaryPath) else {
-            throw RcloneDiscoveryError.binaryNotFound
+            throw RemoteBrowserError.binaryNotFound
         }
 
         let cleanRemote = remoteName.trimmingCharacters(in: CharacterSet(charactersIn: ":"))
@@ -80,7 +101,7 @@ public final class RcloneRemoteBrowser: Sendable {
         )
 
         guard result.exitCode == 0 else {
-            throw RcloneDiscoveryError.executionFailed(result.errorOutput)
+            throw RemoteBrowserError.executionFailed(result.errorOutput)
         }
     }
 }

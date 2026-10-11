@@ -29,13 +29,19 @@
   - Unobtrusive Menu Bar item with dynamic status icons (idle, animated spinning sync, error badge).
   - 1-Click "Sync All" and individual profile triggers.
   - Standalone Manager Window for configuring folder pairs, viewing live transfer speeds, and inspecting logs.
-- **🗂 Interactive Google Drive Folder Browser**: Browse and create folders directly in your Google Drive visually inside the app—no manual cloud path typing needed.
-- **🛡 Toggleable Ignore Presets**:
-  - **Developer Preset**: `node_modules/`, `.git/`, `.venv/`, `__pycache__/`, `target/`, `build/`, `DerivedData/`.
-  - **macOS System Preset**: `.DS_Store`, `.Trash/`, `Thumbs.db`.
+- **🗂 Interactive Google Drive Folder Browser**: Browse and create folders directly in your Google Drive visually inside the app—no manual cloud path typing needed. Includes graceful ancestor recovery if a directory doesn't exist yet.
+- **🛡 1-Click Ignore Presets**:
+  - **Developer Preset**: `node_modules/`, `.git/`, `.venv/`, `__pycache__/`, `target/`, `build/`, `dist/`, `DerivedData/`.
+  - **macOS System Preset**: `.DS_Store`, `.Trash/`, `Thumbs.db`, `.Spotlight-V100/`.
   - **Custom Globs**: Easily add comma-separated custom exclusion rules.
-- **🔍 Safe Dry-Run Simulation**: Preview exactly which files will be copied, updated, or removed before a single byte moves.
-- **⏱ Background Scheduling**: Configure automatic sync intervals (every 15m, 30m, 1h, 4h, daily) or run manually on-demand.
+  - Directly toggleable with 1-click pills on each folder pair card.
+- **🔍 Safe Dry-Run Simulation**: Preview exactly which files will be copied, updated, or removed before a single byte moves, with color-coded action badges.
+- **⏱ Flexible Background Scheduling**:
+  - Set automatic sync intervals directly on folder cards via quick dropdown: **Every 5m, 15m, 30m, 1h, 4h, 12h, Daily, or Weekly**.
+  - Live next-sync countdown indicators (e.g. *“Next: in 14m”*).
+- **🚀 Start at Login**: Integrated macOS `SMAppService` toggle to run automatically in the menu bar at system boot.
+- **☕️ Mac Sleep Prevention**: Uses native `IOPMAssertion` to keep your Mac awake during active file transfers and releases power assertions immediately upon completion.
+- **🎯 Zero Dock Footprint**: Operates cleanly as an accessory utility (`LSUIElement`) from the Menu Bar without cluttering your macOS Dock.
 
 ---
 

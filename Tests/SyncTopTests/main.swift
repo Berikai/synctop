@@ -142,6 +142,37 @@ struct SyncTopTestRunner {
             assert(info.remotes.contains("google"), "Should detect configured 'google' remote")
         }
 
+        await test("RemoteBrowserError formats clear messages for directoryNotFound") {
+            let err = RemoteBrowserError.directoryNotFound(path: "Backups/NonExistent", rawError: "ERROR : : error listing: directory not found")
+            assert(err.localizedDescription.contains("Backups/NonExistent"))
+            assert(err.localizedDescription.contains("not found"))
+        }
+
+        await test("ScheduleInterval contains Weekly and formats countdown correctly") {
+            assert(ScheduleInterval.weekly.rawValue == 10080)
+            assert(ScheduleInterval.weekly.title == "Weekly (7 days)")
+            assert(ScheduleInterval.weekly.shortBadge == "Weekly")
+
+            let scheduler = SyncScheduler()
+            let now = Date()
+            let profile = SyncProfile(
+                name: "Weekly Backup",
+                localPath: "/tmp/weekly",
+                remotePath: "weekly",
+                isAutoSyncEnabled: true,
+                scheduleIntervalMinutes: 60,
+                lastSyncDate: now.addingTimeInterval(-1800) // 30 mins ago
+            )
+            let countdown = scheduler.formatNextSyncCountdown(for: profile, now: now)
+            assert(countdown == "in 30m", "Expected 'in 30m', got \(String(describing: countdown))")
+        }
+
+        await test("SleepAssertionManager retains and releases without crashing") {
+            let manager = SleepAssertionManager.shared
+            manager.retainAssertion(reason: "Unit Test")
+            manager.releaseAssertion()
+        }
+
         print("\n🏁 Summary: \(passed) passed, \(failed) failed.")
         if failed > 0 {
             exit(1)

@@ -15,6 +15,10 @@ public final class AppState: ObservableObject {
     @Published public var isRcloneAvailable: Bool = false
     @Published public var rcloneErrorMessage: String?
     
+    @Published public var isInitializing: Bool = true
+    @Published public var isLaunchAtLoginEnabled: Bool = LaunchAtLoginManager.shared.isEnabled
+    private var hasInitialized: Bool = false
+
     // UI presentation states
     @Published public var isEditorPresented: Bool = false
     @Published public var editingProfile: SyncProfile? = nil
@@ -31,8 +35,18 @@ public final class AppState: ObservableObject {
     private let store: ProfileStore
     private let discovery: RcloneDiscovery
     private let engine: RcloneEngine
-    private let scheduler: SyncScheduler
+    public let scheduler: SyncScheduler
     private var schedulerTask: Task<Void, Never>?
+
+    public func toggleLaunchAtLogin() {
+        let target = !isLaunchAtLoginEnabled
+        do {
+            try LaunchAtLoginManager.shared.setEnabled(target)
+            self.isLaunchAtLoginEnabled = LaunchAtLoginManager.shared.isEnabled
+        } catch {
+            print("Failed to toggle Launch at Login: \(error)")
+        }
+    }
 
     public init(
         store: ProfileStore = ProfileStore(),
@@ -44,16 +58,24 @@ public final class AppState: ObservableObject {
         self.discovery = discovery
         self.engine = engine
         self.scheduler = scheduler
+
+        Task { [weak self] in
+            await self?.initialize()
+        }
     }
 
     public var isAnySyncing: Bool {
         return profiles.contains { $0.lastSyncStatus == .syncing }
     }
 
-    public func initialize() async {
+    public func initialize(force: Bool = false) async {
+        if hasInitialized && !force { return }
+        hasInitialized = true
+        isInitializing = true
         await checkEnvironment()
         await loadProfiles()
         startScheduler()
+        isInitializing = false
     }
 
     public func checkEnvironment() async {
@@ -103,6 +125,27 @@ public final class AppState: ObservableObject {
         await saveProfiles()
     }
 
+    public func toggleDeveloperPreset(id: UUID) async {
+        guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[index].isDeveloperPresetEnabled.toggle()
+        await saveProfiles()
+    }
+
+    public func toggleSystemPreset(id: UUID) async {
+        guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[index].isSystemPresetEnabled.toggle()
+        await saveProfiles()
+    }
+
+    public func updateSchedule(id: UUID, isEnabled: Bool, intervalMinutes: Int? = nil) async {
+        guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
+        profiles[index].isAutoSyncEnabled = isEnabled
+        if let intervalMinutes {
+            profiles[index].scheduleIntervalMinutes = intervalMinutes
+        }
+        await saveProfiles()
+    }
+
     // MARK: - Synchronization Execution
 
     public func syncAll() {
@@ -122,8 +165,11 @@ public final class AppState: ObservableObject {
         activeProgress[id] = .zero
         activeLogs[id] = []
 
+        SleepAssertionManager.shared.retainAssertion(reason: "SyncTop syncing '\(profile.name)'")
+
         let (stream, cancel) = engine.execute(
             profile: profile,
+            customBinaryPath: nil,
             isDryRun: isDryRun,
             forceResync: forceResync
         )
@@ -148,6 +194,7 @@ public final class AppState: ObservableObject {
                     logs.append("⚠️ CONFLICT: \(conflictLine)")
                     self.activeLogs[id] = logs
                 case .completed(let report):
+                    SleepAssertionManager.shared.releaseAssertion()
                     if let currentIndex = self.profiles.firstIndex(where: { $0.id == id }) {
                         var updated = self.profiles[currentIndex]
                         updated.lastSyncDate = report.endTime
@@ -162,6 +209,7 @@ public final class AppState: ObservableObject {
                     try? await self.store.appendReport(report)
                     self.activeCancellations.removeValue(forKey: id)
                 case .failed(let error):
+                    SleepAssertionManager.shared.releaseAssertion()
                     if let currentIndex = self.profiles.firstIndex(where: { $0.id == id }) {
                         var updated = self.profiles[currentIndex]
                         updated.lastSyncStatus = .failed
@@ -183,6 +231,7 @@ public final class AppState: ObservableObject {
 
         let (stream, _) = engine.execute(
             profile: profile,
+            customBinaryPath: nil,
             isDryRun: true,
             forceResync: false
         )
@@ -210,6 +259,7 @@ public final class AppState: ObservableObject {
         if let cancel = activeCancellations[id] {
             cancel()
             activeCancellations.removeValue(forKey: id)
+            SleepAssertionManager.shared.releaseAssertion()
         }
         if let index = profiles.firstIndex(where: { $0.id == id }), profiles[index].lastSyncStatus == .syncing {
             profiles[index].lastSyncStatus = .failed

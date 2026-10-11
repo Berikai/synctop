@@ -74,17 +74,31 @@ public struct ProfileCardView: View {
 
                 Spacer()
 
-                // Exclude tags
-                HStack(spacing: 4) {
-                    if profile.isDeveloperPresetEnabled {
-                        tagView("Dev", icon: "hammer.fill")
+                // Exclude preset toggles
+                HStack(spacing: 6) {
+                    toggleTagView(
+                        title: "Dev",
+                        icon: profile.isDeveloperPresetEnabled ? "hammer.fill" : "hammer",
+                        isEnabled: profile.isDeveloperPresetEnabled,
+                        tooltip: profile.isDeveloperPresetEnabled
+                            ? "Dev preset: ACTIVE (Ignoring node_modules, .git, .venv, target, etc.)\nClick to disable"
+                            : "Dev preset: OFF (Developer build files will be synced)\nClick to enable ignore"
+                    ) {
+                        Task { await state.toggleDeveloperPreset(id: profile.id) }
                     }
-                    if profile.isSystemPresetEnabled {
-                        tagView("macOS", icon: "apple.logo")
+
+                    toggleTagView(
+                        title: "macOS",
+                        icon: "apple.logo",
+                        isEnabled: profile.isSystemPresetEnabled,
+                        tooltip: profile.isSystemPresetEnabled
+                            ? "macOS preset: ACTIVE (Ignoring .DS_Store, .Trash, Spotlight, etc.)\nClick to disable"
+                            : "macOS preset: OFF (System junk files will be synced)\nClick to enable ignore"
+                    ) {
+                        Task { await state.toggleSystemPreset(id: profile.id) }
                     }
-                    if profile.isAutoSyncEnabled {
-                        tagView("\(profile.scheduleIntervalMinutes)m", icon: "clock.fill")
-                    }
+
+                    scheduleDropdownMenu
                 }
             }
 
@@ -224,7 +238,86 @@ public struct ProfileCardView: View {
                     .font(.caption)
                     .foregroundColor(.red)
             }
+
+            if profile.lastSyncStatus != .syncing && profile.isAutoSyncEnabled,
+               let countdown = state.scheduler.formatNextSyncCountdown(for: profile) {
+                Text("• Next: \(countdown)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
         }
+    }
+
+    private var scheduleDropdownMenu: some View {
+        Menu {
+            Section("Automatic Sync Interval") {
+                ForEach(ScheduleInterval.allCases) { interval in
+                    Button {
+                        Task {
+                            await state.updateSchedule(id: profile.id, isEnabled: true, intervalMinutes: interval.rawValue)
+                        }
+                    } label: {
+                        if profile.isAutoSyncEnabled && profile.scheduleIntervalMinutes == interval.rawValue {
+                            Label(interval.title, systemImage: "checkmark")
+                        } else {
+                            Text(interval.title)
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                Task {
+                    await state.updateSchedule(id: profile.id, isEnabled: false)
+                }
+            } label: {
+                if !profile.isAutoSyncEnabled {
+                    Label("Off (Manual Only)", systemImage: "checkmark")
+                } else {
+                    Text("Turn Off Auto-Sync")
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: profile.isAutoSyncEnabled ? "clock.fill" : "clock")
+                    .font(.caption2)
+                if profile.isAutoSyncEnabled {
+                    Text(ScheduleInterval.nearestBadge(for: profile.scheduleIntervalMinutes))
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                } else {
+                    Text("Auto: Off")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 7))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                profile.isAutoSyncEnabled
+                    ? Color.accentColor.opacity(0.15)
+                    : Color.secondary.opacity(0.08)
+            )
+            .foregroundColor(profile.isAutoSyncEnabled ? .accentColor : .secondary)
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(
+                        profile.isAutoSyncEnabled ? Color.accentColor.opacity(0.3) : Color.secondary.opacity(0.2),
+                        lineWidth: 1
+                    )
+            )
+            .cornerRadius(5)
+        }
+        .menuStyle(.borderlessButton)
+        .help(profile.isAutoSyncEnabled
+            ? "Auto-sync every \(profile.scheduleIntervalMinutes)m\(state.scheduler.formatNextSyncCountdown(for: profile).map { " (\($0))" } ?? ""). Click to change."
+            : "Automatic sync is off. Click to set interval (5m, 15m, 1h, Daily, Weekly)."
+        )
     }
 
     private func tagView(_ text: String, icon: String) -> some View {
@@ -237,5 +330,46 @@ public struct ProfileCardView: View {
         .padding(.vertical, 2)
         .background(Color.secondary.opacity(0.12))
         .cornerRadius(4)
+    }
+
+    private func toggleTagView(
+        title: String,
+        icon: String,
+        isEnabled: Bool,
+        tooltip: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.caption2)
+                Text(title)
+                    .font(.caption2)
+                    .fontWeight(isEnabled ? .medium : .regular)
+                if !isEnabled {
+                    Text("Off")
+                        .font(.system(size: 8))
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(
+                isEnabled
+                    ? Color.accentColor.opacity(0.15)
+                    : Color.secondary.opacity(0.08)
+            )
+            .foregroundColor(isEnabled ? .accentColor : .secondary)
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .stroke(
+                        isEnabled ? Color.accentColor.opacity(0.3) : Color.secondary.opacity(0.2),
+                        lineWidth: 1
+                    )
+            )
+            .cornerRadius(5)
+        }
+        .buttonStyle(.plain)
+        .help(tooltip)
     }
 }

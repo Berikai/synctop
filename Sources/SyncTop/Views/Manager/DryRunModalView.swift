@@ -94,11 +94,11 @@ public struct DryRunModalView: View {
 
     private func logRow(_ log: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
-            if log.contains("NOTICE:") || log.contains("Copied") {
+            if log.contains("NOTICE:") || log.contains("Copied") || log.contains("Would copy") {
                 Image(systemName: "arrow.up.circle.fill")
                     .foregroundColor(.green)
                     .font(.caption)
-            } else if log.contains("Deleted") {
+            } else if log.contains("Deleted") || log.contains("Would delete") {
                 Image(systemName: "trash.fill")
                     .foregroundColor(.red)
                     .font(.caption)

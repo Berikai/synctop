@@ -110,8 +110,8 @@ public final class RcloneEngine: Sendable {
                 let startTime = Date()
                 var fullLogs: [String] = []
                 var conflictFiles: [String] = []
-                let transferredCount = 0
-                let deletedCount = 0
+                var transferredCount = 0
+                var deletedCount = 0
 
                 for await line in rawStream {
                     let text: String
@@ -133,11 +133,18 @@ public final class RcloneEngine: Sendable {
                             continuation.yield(.conflictDetected(trimmed))
                         }
 
-                        // Try parsing JSON log from rclone
-                        if let progress = parseJsonLog(line: trimmed) {
+                        // Parse JSON log from rclone
+                        let (progress, humanLog) = parseJsonLog(line: trimmed)
+                        if let progress {
                             continuation.yield(.progress(progress))
-                        } else {
-                            continuation.yield(.log(trimmed))
+                        }
+                        if let humanLog {
+                            if humanLog.contains("Copied:") || humanLog.contains("Would copy:") {
+                                transferredCount += 1
+                            } else if humanLog.contains("Deleted:") || humanLog.contains("Would delete:") {
+                                deletedCount += 1
+                            }
+                            continuation.yield(.log(humanLog))
                         }
                     }
                 }
@@ -198,14 +205,11 @@ public final class RcloneEngine: Sendable {
         return (stream, ref)
     }
 
-    private func parseJsonLog(line: String) -> SyncProgress? {
+    private func parseJsonLog(line: String) -> (progress: SyncProgress?, humanLog: String?) {
         guard line.hasPrefix("{") && line.hasSuffix("}"),
-              let data = line.data(using: .utf8) else {
-            return nil
-        }
-
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return nil
+              let data = line.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (nil, line)
         }
 
         // rclone stats object
@@ -219,7 +223,7 @@ public final class RcloneEngine: Sendable {
 
             let speedFormatted = formatBytesPerSec(speed)
 
-            return SyncProgress(
+            let progress = SyncProgress(
                 bytesTransferred: bytes,
                 totalBytes: totalBytes,
                 percentage: percentage,
@@ -230,11 +234,13 @@ public final class RcloneEngine: Sendable {
                 totalFiles: totalTransfers,
                 rawLog: line
             )
+            return (progress, nil)
         }
 
-        // rclone transfer entry
+        // rclone object action entry (e.g. transfer, dry-run notice, copy, delete)
         if let object = json["object"] as? String {
-            return SyncProgress(
+            let msg = json["msg"] as? String ?? ""
+            let progress = SyncProgress(
                 bytesTransferred: 0,
                 totalBytes: 0,
                 percentage: 0,
@@ -245,9 +251,36 @@ public final class RcloneEngine: Sendable {
                 totalFiles: 0,
                 rawLog: line
             )
+
+            let humanLog: String
+            let lowerMsg = msg.lowercased()
+            if lowerMsg.contains("dry-run") || lowerMsg.contains("skipped copy") {
+                humanLog = "Would copy: \(object)"
+            } else if lowerMsg.contains("skipped delete") {
+                humanLog = "Would delete: \(object)"
+            } else if lowerMsg.contains("copied") {
+                humanLog = "Copied: \(object)"
+            } else if lowerMsg.contains("deleted") {
+                humanLog = "Deleted: \(object)"
+            } else if !msg.isEmpty {
+                humanLog = "\(object): \(msg)"
+            } else {
+                humanLog = "Transferring: \(object)"
+            }
+
+            return (progress, humanLog)
         }
 
-        return nil
+        // General message without object or stats
+        if let msg = json["msg"] as? String {
+            let trimmedMsg = msg.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedMsg.isEmpty && !trimmedMsg.hasPrefix("Transferred:") {
+                return (nil, trimmedMsg)
+            }
+            return (nil, nil)
+        }
+
+        return (nil, line)
     }
 
     private func formatBytesPerSec(_ bytesPerSec: Double) -> String {

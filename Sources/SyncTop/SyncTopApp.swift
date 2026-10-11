@@ -15,9 +15,8 @@ struct SyncTopApp: App {
     var body: some Scene {
         MenuBarExtra {
             MenuBarPopoverView(state: appState) {
-                NSApp.setActivationPolicy(.regular)
-                NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "manager")
+                NSApp.activate(ignoringOtherApps: true)
             }
         } label: {
             Image(systemName: menuBarIcon)

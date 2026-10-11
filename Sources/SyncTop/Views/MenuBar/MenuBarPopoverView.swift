@@ -36,7 +36,17 @@ public struct MenuBarPopoverView: View {
             Divider()
 
             // Profiles List
-            if state.profiles.isEmpty {
+            if state.isInitializing && state.profiles.isEmpty {
+                VStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Loading folder pairs...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+            } else if state.profiles.isEmpty {
                 VStack(spacing: 6) {
                     Text("No folders configured")
                         .font(.subheadline)
@@ -51,7 +61,7 @@ public struct MenuBarPopoverView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
-            } else {
+            } else if state.profiles.count > 4 {
                 ScrollView {
                     VStack(spacing: 8) {
                         ForEach(state.profiles) { profile in
@@ -60,7 +70,14 @@ public struct MenuBarPopoverView: View {
                     }
                     .padding(.horizontal, 12)
                 }
-                .frame(maxHeight: 220)
+                .frame(height: 240)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(state.profiles) { profile in
+                        profileRow(profile)
+                    }
+                }
+                .padding(.horizontal, 12)
             }
 
             Divider()
@@ -94,6 +111,9 @@ public struct MenuBarPopoverView: View {
             .padding(.bottom, 10)
         }
         .frame(width: 320)
+        .task {
+            await state.initialize()
+        }
     }
 
     private func profileRow(_ profile: SyncProfile) -> some View {
@@ -150,6 +170,9 @@ public struct MenuBarPopoverView: View {
     }
 
     private var remoteStatusText: String {
+        if state.isInitializing {
+            return "Checking rclone & remotes..."
+        }
         if !state.isRcloneAvailable {
             return "rclone not detected"
         }
