@@ -130,9 +130,18 @@ public struct MenuBarPopoverView: View {
                 }
 
                 if profile.lastSyncStatus == .syncing, let progress = state.activeProgress[profile.id] {
-                    Text("\(progress.transferSpeed ?? "Syncing...") • \(Int(progress.percentage))%")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(progress.transferSpeed ?? "Syncing...") • Total: \(Int(progress.percentage))%")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        if let file = progress.currentFile {
+                            Text(file)
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
                 } else if let lastDate = profile.lastSyncDate {
                     Text("Synced \(lastDate.formatted(.relative(presentation: .named)))")
                         .font(.caption2)

@@ -234,15 +234,34 @@ public final class RcloneEngine: Sendable {
             let speed = (stats["speed"] as? NSNumber)?.doubleValue ?? 0.0
             let transfers = (stats["transfers"] as? NSNumber)?.intValue ?? 0
             let totalTransfers = (stats["totalTransfers"] as? NSNumber)?.intValue ?? 0
-            let percentage: Double = totalBytes > 0 ? (Double(bytes) / Double(totalBytes)) * 100.0 : 0.0
+            let percentage: Double = totalBytes > 0 ? min(100.0, max(0.0, (Double(bytes) / Double(totalBytes)) * 100.0)) : 0.0
 
             let speedFormatted = formatBytesPerSec(speed)
+
+            var curFile: String? = nil
+            var curFilePct: Double = 0.0
+            var curFileBytes: Int64 = 0
+            var curFileTotal: Int64 = 0
+
+            if let transferring = stats["transferring"] as? [[String: Any]], let first = transferring.first {
+                curFile = first["name"] as? String
+                curFileBytes = (first["bytes"] as? NSNumber)?.int64Value ?? 0
+                curFileTotal = (first["size"] as? NSNumber)?.int64Value ?? 0
+                if let pctNum = first["percentage"] as? NSNumber {
+                    curFilePct = pctNum.doubleValue
+                } else if curFileTotal > 0 {
+                    curFilePct = (Double(curFileBytes) / Double(curFileTotal)) * 100.0
+                }
+            }
 
             let progress = SyncProgress(
                 bytesTransferred: bytes,
                 totalBytes: totalBytes,
                 percentage: percentage,
-                currentFile: nil,
+                currentFile: curFile,
+                currentFilePercentage: curFilePct,
+                currentFileBytes: curFileBytes,
+                currentFileTotalBytes: curFileTotal,
                 transferSpeed: speedFormatted,
                 eta: nil,
                 filesTransferred: transfers,
@@ -255,17 +274,6 @@ public final class RcloneEngine: Sendable {
         // rclone object action entry (e.g. transfer, dry-run notice, copy, delete)
         if let object = json["object"] as? String {
             let msg = json["msg"] as? String ?? ""
-            let progress = SyncProgress(
-                bytesTransferred: 0,
-                totalBytes: 0,
-                percentage: 0,
-                currentFile: object,
-                transferSpeed: nil,
-                eta: nil,
-                filesTransferred: 0,
-                totalFiles: 0,
-                rawLog: line
-            )
 
             let humanLog: String
             let lowerMsg = msg.lowercased()
@@ -283,7 +291,8 @@ public final class RcloneEngine: Sendable {
                 humanLog = "Transferring: \(object)"
             }
 
-            return (progress, humanLog)
+            // Do not emit an empty/zero progress that wipes out the overall progress bar!
+            return (nil, humanLog)
         }
 
         // General message without object or stats

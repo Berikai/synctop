@@ -102,28 +102,75 @@ public struct ProfileCardView: View {
                 }
             }
 
-            // Progress bar if currently syncing
+            // Progress bars if currently syncing
             if profile.lastSyncStatus == .syncing, let progress = state.activeProgress[profile.id] {
-                VStack(alignment: .leading, spacing: 4) {
-                    ProgressView(value: progress.percentage, total: 100)
+                VStack(alignment: .leading, spacing: 6) {
+                    // Total Progress Bar
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("Total Progress")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if progress.totalBytes > 0 {
+                                Text("\(formatBytes(progress.bytesTransferred)) of \(formatBytes(progress.totalBytes)) • \(Int(progress.percentage))%")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            } else if progress.totalFiles > 0 {
+                                Text("\(progress.filesTransferred)/\(progress.totalFiles) files • \(Int(progress.percentage))%")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            } else {
+                                Text("\(Int(progress.percentage))%")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        ProgressView(value: progress.percentage, total: 100)
+                            .tint(.accentColor)
+                    }
+
+                    // Current File Progress Bar (if active file exists)
+                    if let file = progress.currentFile {
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack {
+                                Label(file, systemImage: "doc.fill")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                                if progress.currentFileTotalBytes > 0 {
+                                    Text("\(formatBytes(progress.currentFileBytes)) / \(formatBytes(progress.currentFileTotalBytes)) (\(Int(progress.currentFilePercentage))%)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                } else {
+                                    Text("\(Int(progress.currentFilePercentage))%")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            ProgressView(value: progress.currentFilePercentage, total: 100)
+                                .tint(.green)
+                        }
+                    }
+
+                    // Bottom stats (speed, files count)
                     HStack {
                         if let speed = progress.transferSpeed {
-                            Text(speed)
+                            Label(speed, systemImage: "bolt.fill")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
                         }
-                        if let file = progress.currentFile {
-                            Text(file)
+                        if progress.totalFiles > 0 {
+                            Text("• \(progress.filesTransferred)/\(progress.totalFiles) files transferred")
                                 .font(.caption2)
                                 .foregroundColor(.secondary)
-                                .lineLimit(1)
                         }
                         Spacer()
-                        Text("\(Int(progress.percentage))%")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
                     }
                 }
+                .padding(.vertical, 2)
             }
 
             Divider()
@@ -371,5 +418,12 @@ public struct ProfileCardView: View {
         }
         .buttonStyle(.plain)
         .help(tooltip)
+    }
+
+    private func formatBytes(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useAll]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
     }
 }

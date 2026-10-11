@@ -6,6 +6,9 @@ public struct SyncProgress: Sendable, Codable {
     public var totalBytes: Int64
     public var percentage: Double
     public var currentFile: String?
+    public var currentFilePercentage: Double
+    public var currentFileBytes: Int64
+    public var currentFileTotalBytes: Int64
     public var transferSpeed: String?
     public var eta: String?
     public var filesTransferred: Int
@@ -17,6 +20,9 @@ public struct SyncProgress: Sendable, Codable {
         totalBytes: Int64 = 0,
         percentage: Double = 0.0,
         currentFile: String? = nil,
+        currentFilePercentage: Double = 0.0,
+        currentFileBytes: Int64 = 0,
+        currentFileTotalBytes: Int64 = 0,
         transferSpeed: String? = nil,
         eta: String? = nil,
         filesTransferred: Int = 0,
@@ -27,6 +33,9 @@ public struct SyncProgress: Sendable, Codable {
         self.totalBytes = totalBytes
         self.percentage = percentage
         self.currentFile = currentFile
+        self.currentFilePercentage = currentFilePercentage
+        self.currentFileBytes = currentFileBytes
+        self.currentFileTotalBytes = currentFileTotalBytes
         self.transferSpeed = transferSpeed
         self.eta = eta
         self.filesTransferred = filesTransferred
