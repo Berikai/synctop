@@ -77,6 +77,21 @@ public final class RcloneEngine: Sendable {
             "-v"
         ])
 
+        // High-throughput performance optimizations
+        args.append(contentsOf: [
+            "--transfers", "8",
+            "--checkers", "16",
+            "--drive-chunk-size", "64M",
+            "--buffer-size", "32M",
+            "--drive-pacer-min-sleep", "10ms",
+            "--drive-skip-gdocs"
+        ])
+
+        // Use fast-list for push/pull sync commands (not supported in bisync)
+        if profile.direction != .bidirectional {
+            args.append("--fast-list")
+        }
+
         if isDryRun {
             args.append("--dry-run")
         }
