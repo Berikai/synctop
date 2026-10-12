@@ -4,6 +4,8 @@ SyncTop is a lightweight macOS menu bar app for syncing local folders with Googl
 
 It uses [rclone](https://rclone.org) under the hood to transfer files directly via the Google Drive API, keeping your local folders as normal, high-speed directories.
 
+![Preview Image](./preview.png)
+
 ## Features
 
 - **Mount-free**: Talks directly to Google Drive over HTTPS. No virtual drive mounts or file-locking issues.
