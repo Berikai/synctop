@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import SyncTopCore
 
 public struct ManagerWindowView: View {
@@ -49,6 +50,12 @@ public struct ManagerWindowView: View {
             .background(Color(NSColor.windowBackgroundColor))
 
             Divider()
+
+            // Auth expiration / Reconnect banner
+            if state.isAuthExpired || state.reconnectingRemote != nil || state.reconnectErrorMessage != nil {
+                authAlertBanner
+                Divider()
+            }
 
             // Profiles list or Empty State
             if state.profiles.isEmpty {
@@ -136,11 +143,24 @@ public struct ManagerWindowView: View {
     }
 
     private var remoteStatusPill: some View {
-        HStack(spacing: 5) {
+        let dotColor: Color = {
+            if !state.isRcloneAvailable { return .red }
+            if state.isAuthExpired { return .orange }
+            return .green
+        }()
+
+        let statusText: String = {
+            if !state.isRcloneAvailable { return "Engine Missing" }
+            if state.reconnectingRemote != nil { return "Reconnecting..." }
+            if let expired = state.primaryExpiredRemote { return "\(expired) (Auth Expired)" }
+            return state.detectedRemotes.first ?? "rclone ready"
+        }()
+
+        return HStack(spacing: 5) {
             Circle()
-                .fill(state.isRcloneAvailable ? Color.green : Color.red)
+                .fill(dotColor)
                 .frame(width: 8, height: 8)
-            Text(state.isRcloneAvailable ? (state.detectedRemotes.first ?? "rclone ready") : "Engine Missing")
+            Text(statusText)
                 .font(.caption)
                 .fontWeight(.medium)
         }
@@ -150,8 +170,80 @@ public struct ManagerWindowView: View {
         .cornerRadius(12)
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                .stroke(state.isAuthExpired ? Color.orange.opacity(0.45) : Color.secondary.opacity(0.2), lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private var authAlertBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 10) {
+                if let reconnecting = state.reconnectingRemote {
+                    ProgressView()
+                        .controlSize(.small)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Waiting for browser authorization for '\(reconnecting)'...")
+                            .font(.callout)
+                            .fontWeight(.medium)
+                        Text("Complete the Google sign-in in your browser. SyncTop will automatically resume stalled folders.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    if let url = state.reconnectAuthURL {
+                        Button("Open Auth Link") {
+                            NSWorkspace.shared.open(url)
+                        }
+                        .controlSize(.small)
+                    }
+                    Button("Cancel") {
+                        state.cancelReconnect()
+                    }
+                    .controlSize(.small)
+                } else if let expired = state.primaryExpiredRemote {
+                    Image(systemName: "key.slash.fill")
+                        .foregroundColor(.orange)
+                        .font(.title3)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Google Drive authentication expired for '\(expired)'")
+                            .font(.callout)
+                            .fontWeight(.semibold)
+                        Text("Scheduled syncs for this account are paused until you sign in again.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        state.reconnectRemote(expired)
+                    } label: {
+                        Label("Reconnect \(expired)", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.orange)
+                    .controlSize(.regular)
+                }
+            }
+
+            if let errorMsg = state.reconnectErrorMessage {
+                HStack(spacing: 6) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.red)
+                        .font(.caption)
+                    Text("Reconnect failed: \(errorMsg)")
+                        .font(.caption)
+                        .foregroundColor(.red)
+                    Spacer()
+                    Button("Dismiss") {
+                        state.reconnectErrorMessage = nil
+                    }
+                    .font(.caption2)
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Color.orange.opacity(0.12))
     }
 
     private var emptyStateView: some View {

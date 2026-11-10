@@ -173,6 +173,73 @@ struct SyncTopTestRunner {
             manager.releaseAssertion()
         }
 
+        await test("RcloneAuthHelper detects invalid_grant and normalizes hashed remote names") {
+            let sampleError = #"Failed to create file system for "google:Music Production/Verdant's Total Library": couldn't fetch token: invalid_grant: maybe token expired? - try refreshing with "rclone config reconnect google{nZ8i7}:"#
+            assert(RcloneAuthHelper.isAuthExpiredError(sampleError))
+            assert(RcloneAuthHelper.extractReconnectRemote(from: sampleError) == "google")
+            assert(RcloneAuthHelper.cleanRemoteName("google{nZ8i7}:") == "google")
+            assert(RcloneAuthHelper.cleanRemoteName("google:") == "google")
+            assert(!RcloneAuthHelper.isAuthExpiredError("Copied: Track 01.wav"))
+
+            let notice = "NOTICE: If your browser doesn't open automatically go to the following link: http://127.0.0.1:53682/auth?state=19LootSuUTh3cdaUAuaPsA"
+            assert(RcloneAuthHelper.extractAuthURL(from: notice)?.absoluteString == "http://127.0.0.1:53682/auth?state=19LootSuUTh3cdaUAuaPsA")
+        }
+
+        await test("SyncScheduler pauses auth-expired remotes and honors failed attempt backoff") {
+            let now = Date()
+            let scheduler = SyncScheduler()
+
+            let authBlocked = SyncProfile(
+                name: "Auth Blocked",
+                localPath: "/tmp/a",
+                remoteName: "google",
+                remotePath: "a",
+                isAutoSyncEnabled: true,
+                scheduleIntervalMinutes: 60,
+                lastSyncDate: now.addingTimeInterval(-7200),
+                lastSyncStatus: .authRequired
+            )
+            let remoteBlocked = SyncProfile(
+                name: "Remote Blocked",
+                localPath: "/tmp/b",
+                remoteName: "google",
+                remotePath: "b",
+                isAutoSyncEnabled: true,
+                scheduleIntervalMinutes: 60,
+                lastSyncDate: now.addingTimeInterval(-7200),
+                lastSyncStatus: .success
+            )
+            let recentFailure = SyncProfile(
+                name: "Recent Failure",
+                localPath: "/tmp/c",
+                remoteName: "other",
+                remotePath: "c",
+                isAutoSyncEnabled: true,
+                scheduleIntervalMinutes: 60,
+                lastSyncDate: now.addingTimeInterval(-7200),
+                lastAttemptDate: now.addingTimeInterval(-120),
+                lastSyncStatus: .failed
+            )
+            let eligible = SyncProfile(
+                name: "Eligible",
+                localPath: "/tmp/d",
+                remoteName: "other",
+                remotePath: "d",
+                isAutoSyncEnabled: true,
+                scheduleIntervalMinutes: 60,
+                lastSyncDate: now.addingTimeInterval(-7200),
+                lastSyncStatus: .success
+            )
+
+            let due = scheduler.profilesDueForSync(
+                profiles: [authBlocked, remoteBlocked, recentFailure, eligible],
+                blockedRemotes: ["google"],
+                now: now
+            )
+            assert(due.count == 1 && due.first?.name == "Eligible")
+            assert(scheduler.nextSyncDate(for: authBlocked, now: now) == nil)
+        }
+
         print("\n🏁 Summary: \(passed) passed, \(failed) failed.")
         if failed > 0 {
             exit(1)

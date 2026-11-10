@@ -14,24 +14,29 @@ public struct MenuBarPopoverView: View {
         VStack(alignment: .leading, spacing: 10) {
             // Header
             HStack {
-                Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
-                    .foregroundColor(.accentColor)
+                Image(systemName: state.isAuthExpired ? "exclamationmark.triangle.fill" : "arrow.triangle.2.circlepath.circle.fill")
+                    .foregroundColor(state.isAuthExpired ? .orange : .accentColor)
                     .font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("SyncTop")
                         .font(.headline)
                     Text(remoteStatusText)
                         .font(.caption)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(state.isAuthExpired ? .orange : (state.hasFailures ? .red : .secondary))
                 }
                 Spacer()
-                if state.isAnySyncing {
+                if state.isAnySyncing || state.reconnectingRemote != nil {
                     ProgressView()
                         .controlSize(.small)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.top, 10)
+
+            if state.isAuthExpired || state.reconnectingRemote != nil {
+                popoverAuthBanner
+                    .padding(.horizontal, 12)
+            }
 
             Divider()
 
@@ -117,11 +122,13 @@ public struct MenuBarPopoverView: View {
     }
 
     private func profileRow(_ profile: SyncProfile) -> some View {
-        HStack {
+        let isRemoteExpired = state.authExpiredRemotes.contains(RcloneAuthHelper.cleanRemoteName(profile.remoteName))
+        let isAuthIssue = profile.lastSyncStatus == .authRequired || isRemoteExpired
+
+        return HStack {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
-                    Image(systemName: profile.direction.systemImage)
-                        .foregroundColor(.accentColor)
+                    rowStatusIcon(for: profile, isAuthIssue: isAuthIssue)
                         .font(.caption)
                     Text(profile.name.isEmpty ? URL(fileURLWithPath: profile.localPath).lastPathComponent : profile.name)
                         .font(.subheadline)
@@ -142,6 +149,19 @@ public struct MenuBarPopoverView: View {
                                 .truncationMode(.middle)
                         }
                     }
+                } else if isAuthIssue {
+                    Text("Auth expired • Reconnect required")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                } else if profile.lastSyncStatus == .failed {
+                    Text(profile.lastSyncMessage ?? "Sync failed")
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                        .lineLimit(1)
+                } else if profile.lastSyncStatus == .conflict {
+                    Text("Conflict detected • Check logs")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
                 } else if let lastDate = profile.lastSyncDate {
                     Text("Synced \(lastDate.formatted(.relative(presentation: .named)))")
                         .font(.caption2)
@@ -178,6 +198,61 @@ public struct MenuBarPopoverView: View {
         .cornerRadius(6)
     }
 
+    @ViewBuilder
+    private func rowStatusIcon(for profile: SyncProfile, isAuthIssue: Bool) -> some View {
+        if profile.lastSyncStatus == .syncing {
+            Image(systemName: profile.direction.systemImage)
+                .foregroundColor(.accentColor)
+        } else if isAuthIssue {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+        } else if profile.lastSyncStatus == .failed {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundColor(.red)
+        } else if profile.lastSyncStatus == .conflict {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundColor(.orange)
+        } else {
+            Image(systemName: profile.direction.systemImage)
+                .foregroundColor(.accentColor)
+        }
+    }
+
+    private var popoverAuthBanner: some View {
+        HStack(spacing: 8) {
+            if let reconnecting = state.reconnectingRemote {
+                ProgressView()
+                    .controlSize(.mini)
+                Text("Signing into '\(reconnecting)' in browser...")
+                    .font(.caption2)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                Spacer()
+                Button("Cancel") {
+                    state.cancelReconnect()
+                }
+                .controlSize(.mini)
+            } else if let remote = state.primaryExpiredRemote {
+                Image(systemName: "key.slash.fill")
+                    .foregroundColor(.orange)
+                    .font(.caption)
+                Text("Token expired for '\(remote)'")
+                    .font(.caption2)
+                    .foregroundColor(.primary)
+                Spacer()
+                Button("Reconnect") {
+                    state.reconnectRemote(remote)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.orange)
+                .controlSize(.mini)
+            }
+        }
+        .padding(8)
+        .background(Color.orange.opacity(0.14))
+        .cornerRadius(6)
+    }
+
     private var remoteStatusText: String {
         if state.isInitializing {
             return "Checking rclone & remotes..."
@@ -187,6 +262,12 @@ public struct MenuBarPopoverView: View {
         }
         if state.detectedRemotes.isEmpty {
             return "No remotes configured"
+        }
+        if let expired = state.primaryExpiredRemote {
+            return "Auth expired: \(expired)"
+        }
+        if state.hasFailures {
+            return "Sync failure detected"
         }
         return "Connected: \(state.detectedRemotes.joined(separator: ", "))"
     }

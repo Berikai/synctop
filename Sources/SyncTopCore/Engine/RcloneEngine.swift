@@ -5,6 +5,7 @@ public enum SyncEvent: Sendable {
     case progress(SyncProgress)
     case log(String)
     case conflictDetected(String)
+    case authRequired(remoteName: String, message: String)
     case completed(SyncReport)
     case failed(String)
 }
@@ -127,6 +128,8 @@ public final class RcloneEngine: Sendable {
                 var conflictFiles: [String] = []
                 var transferredCount = 0
                 var deletedCount = 0
+                var authRequiredRemote: String? = nil
+                var authErrorMessage: String? = nil
 
                 for await line in rawStream {
                     let text: String
@@ -153,6 +156,15 @@ public final class RcloneEngine: Sendable {
                         if let progress {
                             continuation.yield(.progress(progress))
                         }
+
+                        // Detect expired/revoked OAuth token in raw line or parsed log
+                        if RcloneAuthHelper.isAuthExpiredError(trimmed) || (humanLog.map(RcloneAuthHelper.isAuthExpiredError) ?? false) {
+                            let targetText = humanLog ?? trimmed
+                            authRequiredRemote = RcloneAuthHelper.extractReconnectRemote(from: targetText)
+                                ?? RcloneAuthHelper.cleanRemoteName(profile.remoteName)
+                            authErrorMessage = targetText
+                        }
+
                         if let humanLog {
                             if humanLog.contains("Copied:") || humanLog.contains("Would copy:") {
                                 transferredCount += 1
@@ -170,6 +182,8 @@ public final class RcloneEngine: Sendable {
                 let status: SyncStatus
                 if exitCode == 0 {
                     status = conflictFiles.isEmpty ? .success : .conflict
+                } else if authRequiredRemote != nil {
+                    status = .authRequired
                 } else {
                     status = .failed
                 }
@@ -186,7 +200,12 @@ public final class RcloneEngine: Sendable {
                     logSummary: fullLogs.suffix(100).joined(separator: "\n")
                 )
 
-                if status == .failed {
+                if let remote = authRequiredRemote, status == .authRequired {
+                    continuation.yield(.authRequired(
+                        remoteName: remote,
+                        message: authErrorMessage ?? "Authentication expired. Reconnect required."
+                    ))
+                } else if status == .failed {
                     continuation.yield(.failed("Process exited with code \(exitCode)"))
                 }
                 continuation.yield(.completed(report))

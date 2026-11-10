@@ -10,6 +10,7 @@ public final class RemoteBrowserViewModel: ObservableObject {
     @Published public var errorMessage: String? = nil
     @Published public var errorDetails: String? = nil
     @Published public var isDirectoryNotFound: Bool = false
+    @Published public var isAuthRequired: Bool = false
     
     @Published public var infoBanner: String? = nil
     @Published public var suggestedMissingPath: String? = nil
@@ -41,6 +42,7 @@ public final class RemoteBrowserViewModel: ObservableObject {
         errorMessage = nil
         errorDetails = nil
         isDirectoryNotFound = false
+        isAuthRequired = false
 
         do {
             let items = try await browser.listDirectories(
@@ -95,6 +97,11 @@ public final class RemoteBrowserViewModel: ObservableObject {
 
                 self.isDirectoryNotFound = true
                 self.errorMessage = "Directory '\(target.isEmpty ? "/" : target)' does not exist on \(cleanRemoteName)."
+                self.errorDetails = details
+                self.isLoading = false
+            } else if case .authRequired(_, let details) = error {
+                self.isAuthRequired = true
+                self.errorMessage = error.localizedDescription
                 self.errorDetails = details
                 self.isLoading = false
             } else if case .executionFailed(let details) = error {
@@ -297,11 +304,11 @@ public struct RemoteFolderBrowserView: View {
             } else if let error = vm.errorMessage {
                 VStack(spacing: 12) {
                     Spacer()
-                    Image(systemName: vm.isDirectoryNotFound ? "folder.badge.questionmark" : "exclamationmark.triangle")
+                    Image(systemName: vm.isAuthRequired ? "key.slash.fill" : (vm.isDirectoryNotFound ? "folder.badge.questionmark" : "exclamationmark.triangle"))
                         .font(.system(size: 40))
                         .foregroundColor(vm.isDirectoryNotFound ? .blue : .orange)
 
-                    Text(vm.isDirectoryNotFound ? "Folder Does Not Exist" : "Failed to Load Directories")
+                    Text(vm.isAuthRequired ? "Authentication Expired" : (vm.isDirectoryNotFound ? "Folder Does Not Exist" : "Failed to Load Directories"))
                         .font(.headline)
 
                     Text(error)

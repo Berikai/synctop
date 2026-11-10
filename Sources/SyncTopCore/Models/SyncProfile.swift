@@ -6,6 +6,7 @@ public enum SyncStatus: String, Codable, Sendable {
     case success = "success"
     case failed = "failed"
     case conflict = "conflict"
+    case authRequired = "auth_required"
 
     public var displayName: String {
         switch self {
@@ -14,6 +15,7 @@ public enum SyncStatus: String, Codable, Sendable {
         case .success: return "Up to date"
         case .failed: return "Failed"
         case .conflict: return "Conflict Detected"
+        case .authRequired: return "Auth Expired"
         }
     }
 }
@@ -42,6 +44,7 @@ public struct SyncProfile: Identifiable, Codable, Sendable {
     // State & History
     public var isBisyncInitialized: Bool
     public var lastSyncDate: Date?
+    public var lastAttemptDate: Date?
     public var lastSyncStatus: SyncStatus
     public var lastSyncMessage: String?
     
@@ -60,6 +63,7 @@ public struct SyncProfile: Identifiable, Codable, Sendable {
         securityScopedBookmark: Data? = nil,
         isBisyncInitialized: Bool = false,
         lastSyncDate: Date? = nil,
+        lastAttemptDate: Date? = nil,
         lastSyncStatus: SyncStatus = .idle,
         lastSyncMessage: String? = nil
     ) {
@@ -77,6 +81,7 @@ public struct SyncProfile: Identifiable, Codable, Sendable {
         self.securityScopedBookmark = securityScopedBookmark
         self.isBisyncInitialized = isBisyncInitialized
         self.lastSyncDate = lastSyncDate
+        self.lastAttemptDate = lastAttemptDate
         self.lastSyncStatus = lastSyncStatus
         self.lastSyncMessage = lastSyncMessage
     }

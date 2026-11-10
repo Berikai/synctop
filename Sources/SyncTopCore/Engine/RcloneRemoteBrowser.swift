@@ -16,6 +16,7 @@ public struct RemoteFolderItem: Identifiable, Hashable, Sendable {
 public enum RemoteBrowserError: LocalizedError, Sendable, Equatable {
     case binaryNotFound
     case directoryNotFound(path: String, rawError: String)
+    case authRequired(remoteName: String, rawError: String)
     case executionFailed(String)
 
     public var errorDescription: String? {
@@ -24,6 +25,8 @@ public enum RemoteBrowserError: LocalizedError, Sendable, Equatable {
             return "rclone binary not found. Please install rclone or specify custom path."
         case .directoryNotFound(let path, _):
             return "Directory '\(path)' was not found on remote."
+        case .authRequired(let remoteName, _):
+            return "Authentication for '\(remoteName)' has expired. Please reconnect your account."
         case .executionFailed(let reason):
             return "Failed to browse remote: \(reason)"
         }
@@ -63,11 +66,7 @@ public final class RcloneRemoteBrowser: Sendable {
         )
 
         guard result.exitCode == 0 else {
-            let stderrLower = result.errorOutput.lowercased()
-            if stderrLower.contains("directory not found") {
-                throw RemoteBrowserError.directoryNotFound(path: cleanSubPath, rawError: result.errorOutput)
-            }
-            throw RemoteBrowserError.executionFailed(result.errorOutput)
+            throw mapError(remote: cleanRemote, subPath: cleanSubPath, errorOutput: result.errorOutput)
         }
 
         let lines = result.output.components(separatedBy: .newlines)
@@ -101,7 +100,19 @@ public final class RcloneRemoteBrowser: Sendable {
         )
 
         guard result.exitCode == 0 else {
-            throw RemoteBrowserError.executionFailed(result.errorOutput)
+            throw mapError(remote: cleanRemote, subPath: nil, errorOutput: result.errorOutput)
         }
+    }
+
+    private func mapError(remote: String, subPath: String?, errorOutput: String) -> RemoteBrowserError {
+        if RcloneAuthHelper.isAuthExpiredError(errorOutput) {
+            let cleaned = RcloneAuthHelper.extractReconnectRemote(from: errorOutput)
+                ?? RcloneAuthHelper.cleanRemoteName(remote)
+            return .authRequired(remoteName: cleaned, rawError: errorOutput)
+        }
+        if let subPath, errorOutput.lowercased().contains("directory not found") {
+            return .directoryNotFound(path: subPath, rawError: errorOutput)
+        }
+        return .executionFailed(errorOutput)
     }
 }

@@ -234,8 +234,19 @@ public struct ProfileCardView: View {
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.secondary.opacity(0.15), lineWidth: 1)
+                .stroke(cardBorderColor, lineWidth: 1)
         )
+    }
+
+    private var cardBorderColor: Color {
+        switch profile.lastSyncStatus {
+        case .authRequired:
+            return Color.orange.opacity(0.45)
+        case .failed:
+            return Color.red.opacity(0.45)
+        default:
+            return Color.secondary.opacity(0.15)
+        }
     }
 
     private var directionBadge: some View {
@@ -278,6 +289,12 @@ public struct ProfileCardView: View {
                 Text("Conflict copy preserved")
                     .font(.caption)
                     .foregroundColor(.orange)
+            case .authRequired:
+                Image(systemName: "key.slash.fill")
+                    .foregroundColor(.orange)
+                Text("Auth expired — Reconnect required")
+                    .font(.caption)
+                    .foregroundColor(.orange)
             case .failed:
                 Image(systemName: "xmark.circle.fill")
                     .foregroundColor(.red)
@@ -286,11 +303,17 @@ public struct ProfileCardView: View {
                     .foregroundColor(.red)
             }
 
-            if profile.lastSyncStatus != .syncing && profile.isAutoSyncEnabled,
-               let countdown = state.scheduler.formatNextSyncCountdown(for: profile) {
-                Text("• Next: \(countdown)")
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+            if profile.lastSyncStatus != .syncing && profile.isAutoSyncEnabled {
+                let cleanRemote = RcloneAuthHelper.cleanRemoteName(profile.remoteName)
+                if profile.lastSyncStatus == .authRequired || state.authExpiredRemotes.contains(cleanRemote) {
+                    Text("• Auto-sync paused")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                } else if let countdown = state.scheduler.formatNextSyncCountdown(for: profile) {
+                    Text("• Next: \(countdown)")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
             }
         }
     }

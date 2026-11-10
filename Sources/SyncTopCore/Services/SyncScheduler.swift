@@ -59,27 +59,45 @@ public final class SyncScheduler: Sendable {
     public init() {}
 
     /// Determines which profiles are due for execution based on their schedule interval.
-    public func profilesDueForSync(profiles: [SyncProfile], now: Date = Date()) -> [SyncProfile] {
+    public func profilesDueForSync(
+        profiles: [SyncProfile],
+        blockedRemotes: Set<String> = [],
+        now: Date = Date()
+    ) -> [SyncProfile] {
         return profiles.filter { profile in
             guard profile.isAutoSyncEnabled else { return false }
             guard profile.lastSyncStatus != .syncing else { return false }
+            guard profile.lastSyncStatus != .authRequired else { return false }
+
+            let cleanRemote = RcloneAuthHelper.cleanRemoteName(profile.remoteName)
+            guard !blockedRemotes.contains(cleanRemote) else { return false }
 
             let intervalSeconds = Double(max(1, profile.scheduleIntervalMinutes) * 60)
-            guard let lastSync = profile.lastSyncDate else {
+            guard let referenceDate = effectiveLastRunDate(for: profile) else {
                 // Never synced before, trigger immediately
                 return true
             }
 
-            return now.timeIntervalSince(lastSync) >= intervalSeconds
+            return now.timeIntervalSince(referenceDate) >= intervalSeconds
         }
     }
 
     /// Computes the estimated next execution date for a profile.
     public func nextSyncDate(for profile: SyncProfile, now: Date = Date()) -> Date? {
         guard profile.isAutoSyncEnabled else { return nil }
-        guard let lastSync = profile.lastSyncDate else { return now }
+        guard profile.lastSyncStatus != .authRequired else { return nil }
+        guard let referenceDate = effectiveLastRunDate(for: profile) else { return now }
         let intervalSeconds = Double(max(1, profile.scheduleIntervalMinutes) * 60)
-        return lastSync.addingTimeInterval(intervalSeconds)
+        return referenceDate.addingTimeInterval(intervalSeconds)
+    }
+
+    private func effectiveLastRunDate(for profile: SyncProfile) -> Date? {
+        switch (profile.lastSyncDate, profile.lastAttemptDate) {
+        case (let sync?, let attempt?): return max(sync, attempt)
+        case (let sync?, nil): return sync
+        case (nil, let attempt?): return attempt
+        case (nil, nil): return nil
+        }
     }
 
     /// Formats a user-friendly string describing when the next auto-sync is scheduled.

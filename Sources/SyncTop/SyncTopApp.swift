@@ -18,6 +18,12 @@ struct SyncTopApp: App {
                 openWindow(id: "manager")
                 NSApp.activate(ignoringOtherApps: true)
             }
+            .onAppear {
+                NotificationManager.shared.onOpenManagerRequested = {
+                    openWindow(id: "manager")
+                    NSApp.activate(ignoringOtherApps: true)
+                }
+            }
         } label: {
             Image(systemName: menuBarIcon)
         }
@@ -35,6 +41,9 @@ struct SyncTopApp: App {
     private var menuBarIcon: String {
         if appState.isAnySyncing {
             return "arrow.triangle.2.circlepath"
+        }
+        if appState.isAuthExpired || appState.hasFailures || appState.hasConflicts {
+            return "exclamationmark.triangle.fill"
         }
         return "arrow.triangle.2.circlepath.circle"
     }
